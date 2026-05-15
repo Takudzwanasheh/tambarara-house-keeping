@@ -9,7 +9,7 @@ class RoomWidget extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Container(
-        height: 50,
+        height: 30,
         color: Colors.blue,
 
         child: Column(children: [

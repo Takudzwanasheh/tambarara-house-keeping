@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
 
-class DummyRooms {
+class RoomModel {
   final String roomNumber;
   final String roomStatus;
+  final String roomCapacity;
+  final String roomPrice;
+  final String roomType;
 
-  DummyRooms(this.roomNumber, this.roomStatus);
+  RoomModel(
+    this.roomNumber,
+    this.roomStatus,
+    this.roomCapacity,
+    this.roomPrice,
+    this.roomType,
+  );
+
+  factory RoomModel.fromMap(Map<String, dynamic> roomList) {
+    return RoomModel(
+        roomList["roomNumber"],
+        roomList["roomStatus"],
+        roomList["roomCapacity"],
+        roomList["roomPrice"],
+        roomList["roomType"]);
+  }
+
 }
-
-
-final List<DummyRooms> roomsList = [
-  DummyRooms('A01', 'Available'),
-  DummyRooms('A02', 'NotReady'),
-  DummyRooms('A03', 'Maintenance'),
-  DummyRooms('A04', 'Available'),
-  DummyRooms('A05', 'Occupied'),
-  DummyRooms('A06', 'Available'),
-  DummyRooms('A07', 'Cleaning'),
-  DummyRooms('B08', 'Occupied'),
-  DummyRooms('B09', 'Available'),
-  DummyRooms('B10', 'Maintenance'),
-];

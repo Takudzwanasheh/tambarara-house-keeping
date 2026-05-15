@@ -1,20 +1,6 @@
 import 'package:flutter/material.dart';
-
-class SupplyItem {
-  final String itemName;
-  final String category;
-  final int stockLevel;
-  final String unit;
-  final String status;
-
-  SupplyItem({
-    required this.itemName,
-    required this.category,
-    required this.stockLevel,
-    required this.unit,
-    required this.status,
-  });
-}
+import 'package:tambarara_house_keeping/features/housekeeping/controllers/dashboardController.dart';
+import 'package:tambarara_house_keeping/features/housekeeping/model/inventorymodel.dart';
 
 class AdminTable extends StatefulWidget {
   const AdminTable({super.key});
@@ -24,87 +10,43 @@ class AdminTable extends StatefulWidget {
 }
 
 class _AdminTableState extends State<AdminTable> {
-  final List<SupplyItem> _allSupplies = [
-    SupplyItem(itemName: 'Toilet Paper', category: 'Toiletries', stockLevel: 450, unit: 'Rolls', status: 'In Stock'),
-    SupplyItem(itemName: 'Shampoo (30ml)', category: 'Toiletries', stockLevel: 120, unit: 'Bottles', status: 'Low Stock'),
-    SupplyItem(itemName: 'Bed Sheets (King)', category: 'Linens', stockLevel: 85, unit: 'Pairs', status: 'In Stock'),
-    SupplyItem(itemName: 'Floor Cleaner', category: 'Cleaning', stockLevel: 15, unit: 'Liters', status: 'In Stock'),
-    SupplyItem(itemName: 'Bath Towels', category: 'Linens', stockLevel: 8, unit: 'Units', status: 'Out of Stock'),
-    SupplyItem(itemName: 'Hand Soap', category: 'Toiletries', stockLevel: 200, unit: 'Refills', status: 'In Stock'),
-    SupplyItem(itemName: 'Pillow Cases', category: 'Linens', stockLevel: 150, unit: 'Pairs', status: 'In Stock'),
-    SupplyItem(itemName: 'Glass Cleaner', category: 'Cleaning', stockLevel: 5, unit: 'Liters', status: 'Low Stock'),
-    SupplyItem(itemName: 'Toothbrush Kits', category: 'Toiletries', stockLevel: 60, unit: 'Kits', status: 'In Stock'),
-    SupplyItem(itemName: 'Laundry Detergent', category: 'Cleaning', stockLevel: 40, unit: 'Kg', status: 'In Stock'),
-    SupplyItem(itemName: 'Face Towels', category: 'Linens', stockLevel: 25, unit: 'Units', status: 'Low Stock'),
-    SupplyItem(itemName: 'Trash Bags (Large)', category: 'Cleaning', stockLevel: 500, unit: 'Units', status: 'In Stock'),
-    SupplyItem(itemName: 'Trash Bags (Small)', category: 'Cleaning', stockLevel: 0, unit: 'Units', status: 'Out of Stock'),
-    SupplyItem(itemName: 'Conditioner (30ml)', category: 'Toiletries', stockLevel: 110, unit: 'Bottles', status: 'In Stock'),
-    SupplyItem(itemName: 'Body Lotion', category: 'Toiletries', stockLevel: 95, unit: 'Bottles', status: 'In Stock'),
-    SupplyItem(itemName: 'Slippers', category: 'Essentials', stockLevel: 40, unit: 'Pairs', status: 'Low Stock'),
-    SupplyItem(itemName: 'Bath Mats', category: 'Linens', stockLevel: 30, unit: 'Units', status: 'In Stock'),
-    SupplyItem(itemName: 'Bleach', category: 'Cleaning', stockLevel: 20, unit: 'Liters', status: 'In Stock'),
-    SupplyItem(itemName: 'Room Freshener', category: 'Cleaning', stockLevel: 12, unit: 'Cans', status: 'Low Stock'),
-    SupplyItem(itemName: 'Tea Bags (Mix)', category: 'F&B', stockLevel: 1000, unit: 'Units', status: 'In Stock'),
-    SupplyItem(itemName: 'Coffee Sachets', category: 'F&B', stockLevel: 800, unit: 'Units', status: 'In Stock'),
-    SupplyItem(itemName: 'Sugar Packets', category: 'F&B', stockLevel: 1200, unit: 'Units', status: 'In Stock'),
-  ];
+  List<Inventorymodel> _inventoryItems = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
-          child: DataTable(
-            columnSpacing: 24,
-            columns: const [
-              DataColumn(label: Text('Item Name', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Stock Level', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: _allSupplies.map((item) => _buildDataRow(item)).toList(),
-          ),
-        ),
-      ),
-    );
+  void initState() {
+    super.initState();
+    _getInventoryData();
   }
 
-  DataRow _buildDataRow(SupplyItem item) {
-    return DataRow(
-      cells: [
-        DataCell(Text(item.itemName)),
-        DataCell(Text(item.category)),
-        DataCell(Text('${item.stockLevel} ${item.unit}')),
-        DataCell(
-          Text(
-            item.status,
-            style: TextStyle(
-              color: _getStatusColor(item.status),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        DataCell(
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline, color: Colors.blue, size: 20),
-                onPressed: () => _showRestockDialog(item),
-                tooltip: 'Restock',
-              ),
-              IconButton(
-                icon: const Icon(Icons.edit, color: Colors.grey, size: 20),
-                onPressed: () {},
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+  Future<void> _getInventoryData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    
+    try {
+      final items = await DashboardController().fetchInventoryData();
+      print("INVENTORY ITEMS FETCHED: ${items.length} items");
+      setState(() {
+        _inventoryItems = items;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print("Error fetching inventory: $e");
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _getStockStatus(double? currentStock, double? reorderLevel) {
+    if (currentStock == null) return 'Unknown';
+    if (currentStock <= 0) return 'Out of Stock';
+    if (reorderLevel != null && currentStock <= reorderLevel) return 'Low Stock';
+    return 'In Stock';
   }
 
   Color _getStatusColor(String status) {
@@ -120,18 +62,22 @@ class _AdminTableState extends State<AdminTable> {
     }
   }
 
-  void _showRestockDialog(SupplyItem item) {
+  void _showRestockDialog(Inventorymodel item) {
+    final TextEditingController quantityController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Restock ${item.itemName}'),
+        title: Text('Restock ${item.productName}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Current Level: ${item.stockLevel} ${item.unit}'),
+            Text('Current Stock: ${item.currentStock?.toString() ?? '0'} ${item.unit ?? ''}'),
+            Text('Reorder Level: ${item.reorderLevel?.toString() ?? '5'} ${item.unit ?? ''}'),
             const SizedBox(height: 16),
-            const TextField(
-              decoration: InputDecoration(
+            TextField(
+              controller: quantityController,
+              decoration: const InputDecoration(
                 labelText: 'Quantity to add',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.inventory),
@@ -146,15 +92,171 @@ class _AdminTableState extends State<AdminTable> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${item.itemName} restock request submitted')),
-              );
+            onPressed: () async {
+              final quantity = double.tryParse(quantityController.text);
+              if (quantity != null && quantity > 0) {
+                Navigator.pop(context);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Adding ${quantity.toStringAsFixed(0)} ${item.unit} to ${item.productName}...'),
+                  ),
+                );
+
+                try {
+                  // TODO: Call API to add stock
+                  // await DashboardController().addStock(item.id, quantity);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Successfully added ${quantity.toStringAsFixed(0)} ${item.unit} to ${item.productName}'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+
+                  // Refresh inventory data
+                  await _getInventoryData();
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to add stock: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid quantity'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             child: const Text('Add Stock'),
           ),
         ],
+      ),
+    );
+  }
+
+  DataRow _buildDataRow(Inventorymodel item) {
+    String stockStatus = _getStockStatus(item.currentStock, item.reorderLevel);
+
+    return DataRow(
+      cells: [
+        DataCell(Text(item.productName)),
+        DataCell(Text(item.category)),
+        DataCell(Text('${item.currentStock?.toString() ?? '0'} ${item.unit ?? ''}')),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _getStatusColor(stockStatus).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              stockStatus,
+              style: TextStyle(
+                color: _getStatusColor(stockStatus),
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+        DataCell(
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, color: Colors.blue, size: 20),
+            onPressed: () => _showRestockDialog(item),
+            tooltip: 'Restock',
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading inventory...'),
+          ],
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('Error: $_errorMessage'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _getInventoryData,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: _inventoryItems.isEmpty
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32.0),
+                  child: Column(
+                    children: [
+                      Icon(Icons.inventory, size: 48, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text('No inventory items found'),
+                    ],
+                  ),
+                ),
+              )
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: 24,
+                  headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+                  columns: const [
+                    DataColumn(
+                      label: Text('Item Name',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    DataColumn(
+                      label: Text('Category',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    DataColumn(
+                      label: Text('Stock',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    DataColumn(
+                      label: Text('Status',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    DataColumn(
+                      label: Text('Actions',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                  rows: _inventoryItems.map((item) => _buildDataRow(item)).toList(),
+                ),
+              ),
       ),
     );
   }

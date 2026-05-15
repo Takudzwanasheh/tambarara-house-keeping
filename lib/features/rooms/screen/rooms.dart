@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:tambarara_house_keeping/features/rooms/model/room-model.dart';
+import 'package:tambarara_house_keeping/data/models/room.dart'; // Use the new Room model
 import 'package:tambarara_house_keeping/features/rooms/screen/room_detail_screen.dart';
+
+import '../controller/roomController.dart';
 
 class RoomsScreen extends StatefulWidget {
   final String initialFilter;
@@ -12,30 +14,59 @@ class RoomsScreen extends StatefulWidget {
 
 class _RoomsScreenState extends State<RoomsScreen> {
   late String _filterStatus;
+  List<Room> _allRooms = [];
+  List<Room> _roomsOccupied = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  final RoomRepository _roomRepository = RoomRepository();
 
   @override
   void initState() {
     super.initState();
     _filterStatus = widget.initialFilter;
+    _fetchRooms();
   }
 
-  List<DummyRooms> get filteredRooms {
+  Future<void> _fetchRooms() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      _allRooms = await _roomRepository.fetchRooms();
+    } catch (e) {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      debugPrint('Error fetching rooms: $_errorMessage'); // Debug print
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<Room> get filteredRooms {
     if (_filterStatus == 'All') {
-      return roomsList;
+      return _allRooms;
     }
-    if (_filterStatus == 'Dirty') {
-      return roomsList.where((room) => room.roomStatus == 'NotReady' || room.roomStatus == 'Cleaning').toList();
+    if (_filterStatus == 'Dirty'.toUpperCase()) {
+      return _allRooms.where((room) => room.roomStatus == 'DIRTY').toList();
     }
-    return roomsList.where((room) => room.roomStatus == _filterStatus).toList();
+    return _allRooms.where((room) => room.roomStatus == _filterStatus).toList();
   }
 
-  List<DummyRooms> get availableRooms {
-    return roomsList.where((room) => room.roomStatus == "Available").toList();
+  List<Room> get availableRooms {
+    return _allRooms.where((room) => room.roomStatus == "CLEAN").toList();
   }
 
-  List<DummyRooms> get occupiedRooms {
-    return roomsList.where((room) => room.roomStatus == "Occupied").toList();
+  List<Room> get dirtyRooms {
+    return _allRooms.where((room) => room.roomStatus == "DIRTY").toList();
   }
+
+  List<Room> get occupiedRooms {
+    return _allRooms.where((room) => room.roomStatus == "OCCUPIED").toList();
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +76,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
         actions: [
           if (_filterStatus != 'All')
             IconButton(
-              icon: const Icon(Icons.filter_list_off),
+              icon: const Icon(Icons.clear,color: Colors.white,),
               onPressed: () {
                 setState(() {
                   _filterStatus = 'All';
@@ -75,9 +106,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.blue,
+                          color: Colors.green,
                           borderRadius: BorderRadius.circular(8),
-                          border: _filterStatus == 'Available' ? Border.all(color: Colors.black, width: 2) : null,
+                          border: _filterStatus == 'CLEAN' ? Border.all(color: Colors.black, width: 2) : null,
                         ),
                         child: Column(
                           children: [
@@ -109,9 +140,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red,
+                          color: Colors.blue,
                           borderRadius: BorderRadius.circular(8),
-                          border: _filterStatus == 'Occupied' ? Border.all(color: Colors.black, width: 2) : null,
+                          border: _filterStatus == 'OCCUPIED' ? Border.all(color: Colors.black, width: 2) : null,
                         ),
                         child: Column(
                           children: [
@@ -131,13 +162,47 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     ),
                   ),
                 ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _filterStatus = _filterStatus == 'Dirty' ? 'All' : 'Dirty';
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(8),
+                          border: _filterStatus == 'DIRTY' ? Border.all(color: Colors.black, width: 2) : null,
+                        ),
+                        child: Column(
+                          children: [
+                            const Text(
+                              "ROOMS DIRTY",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "${dirtyRooms.length}",
+                              style: const TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
             const Divider(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               child: Text(
-                _filterStatus == 'All' ? "Total Rooms: ${roomsList.length}" : "$_filterStatus Rooms: ${filteredRooms.length}",
+                _filterStatus == 'All' ? "Total Rooms: ${filteredRooms.length}" : "$_filterStatus Rooms: ${filteredRooms.length}",
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -157,106 +222,111 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 itemBuilder: (context, index) {
                   final room = filteredRooms[index];
 
-                  return InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => RoomDetailScreen(room: room),
+                    return InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => RoomDetailScreen(room: room),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: _getRoomColor(room.roomStatus),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      );
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _getRoomColor(room.roomStatus),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    "Room ${room.roomNumber}",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      "Room ${room.roomNumber}",
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                PopupMenuButton<String>(
-                                  padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.more_vert, color: Colors.white, size: 18),
-                                  onSelected: (value) {
-                                    _handleMenuAction(value, room, index);
-                                  },
-                                  itemBuilder: (BuildContext context) => [
-                                    const PopupMenuItem(
-                                      value: 'edit',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.edit, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('Edit'),
-                                        ],
+                                  PopupMenuButton<String>(
+                                    padding: EdgeInsets.zero,
+                                    icon: const Icon(Icons.more_vert, color: Colors.white, size: 18),
+                                    onSelected: (value) {
+                                      if (value == 'edit') {
+                                        _showEditDialog(room); // Pass the room object
+                                      }
+                                      if(value=="clean")
+                                        _requestCleaning(room);
+                                    },
+
+                                    itemBuilder: (BuildContext context) => [
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.edit, size: 18),
+                                            SizedBox(width: 8),
+                                            Text('Edit'),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'clean',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.cleaning_services, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('Clean'),
-                                        ],
+                                      const PopupMenuItem(
+                                        value: 'clean',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.cleaning_services, size: 18),
+                                            SizedBox(width: 8),
+                                            Text('Clean'),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'maintenance',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.build, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('Repair'),
-                                        ],
+                                      const PopupMenuItem(
+                                        value: 'maintenance',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.build, size: 18),
+                                            SizedBox(width: 8),
+                                            Text('Repair'),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            Text(
-                              room.roomStatus,
-                              style: TextStyle(
-                                color: _getStatusColor(room.roomStatus),
-                                fontWeight: FontWeight.w500,
-                                fontSize: 10,
+                                    ],
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              Text(
+                                room.roomStatus,
+                                style: TextStyle(
+                                  color: _getStatusColor(room.roomStatus),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
   }
 
   // Handle menu actions
-  void _handleMenuAction(String action, DummyRooms room, int index) {
+  void _handleMenuAction(String action, Room room) {
     switch (action) {
       case 'edit':
-        _showEditDialog(room, index);
+        _showEditDialog(room);
         break;
       case 'clean':
         _requestCleaning(room);
@@ -266,14 +336,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
         break;
     }
   }
-
   // Method to edit room
-  void _showEditDialog(DummyRooms room, int index) {
+  void _showEditDialog(Room room) {
     final TextEditingController roomNumberController = TextEditingController(text: room.roomNumber);
     String selectedStatus = room.roomStatus;
-
+    bool isUpdating = false;
     showDialog(
       context: context,
+      barrierDismissible: !isUpdating,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text("Edit Room"),
@@ -286,6 +356,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   labelText: "Room Number",
                   border: OutlineInputBorder(),
                 ),
+                readOnly: true,
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
@@ -295,16 +366,21 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'Available', child: Text('Available')),
-                  DropdownMenuItem(value: 'NotReady', child: Text('Not Ready')),
-                  DropdownMenuItem(value: 'Occupied', child: Text('Occupied')),
-                  DropdownMenuItem(value: 'Maintenance', child: Text('Maintenance')),
-                  DropdownMenuItem(value: 'Cleaning', child: Text('Cleaning')),
+                  DropdownMenuItem(value: 'CLEAN', child: Text('CLEAN')),
+                  DropdownMenuItem(value: 'DIRTY', child: Text('DIRTY')),
+                  DropdownMenuItem(value: 'MAINTENANCE', child: Text('MAINTENANCE')),
+                  DropdownMenuItem(value: 'OCCUPIED', child: Text('OCCUPIED')),
+                  DropdownMenuItem(value: 'AVAILABLE', child: Text('AVAILABLE')),
                 ],
                 onChanged: (value) {
                   selectedStatus = value!;
-                },
-              ),
+                  print("Selected status updated to: $selectedStatus");
+                }),
+              if (isUpdating)
+                const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: LinearProgressIndicator(),
+                ),
             ],
           ),
           actions: [
@@ -313,19 +389,46 @@ class _RoomsScreenState extends State<RoomsScreen> {
               child: const Text("Cancel"),
             ),
             ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  // Find the index in the actual list because we might be looking at filteredRooms
-                  final realIndex = roomsList.indexWhere((r) => r.roomNumber == room.roomNumber);
-                  if (realIndex != -1) {
-                    roomsList[realIndex] = DummyRooms(
-                      roomNumberController.text,
-                      selectedStatus,
+              onPressed: isUpdating
+                  ? null
+                  : () async {
+                // Close keyboard if open
+                FocusScope.of(context).unfocus();
+
+                // Show loading state
+                setDialogState() {
+                  isUpdating = true;
+                };
+
+                try {
+                  final updatedRoom = await _roomRepository.updateRoomStatus(
+                      room.id.toString(),
+                      selectedStatus
+                  );
+                  setState(() {
+                    final index = _allRooms.indexWhere(
+                            (r) => r.roomNumber == room.roomNumber
                     );
-                  }
-                });
-                Navigator.pop(context);
-                _showSnackBar("Room ${room.roomNumber} updated successfully!");
+                    if (index != -1) {
+                      _allRooms[index] = updatedRoom;
+                    }
+                  });
+                  // Close dialog
+                  Navigator.pop(context);
+
+                  // Show success message
+                  _showSnackBar(
+                      "Room ${room.roomNumber} status updated to $selectedStatus!"
+                  );
+                } catch (e) {
+                  // Close dialog
+                  Navigator.pop(context);
+
+                  // Show error message
+                  _showSnackBar(
+                      "Failed to update room: ${e.toString()}",
+                  );
+                }
               },
               child: const Text("Save"),
             ),
@@ -336,7 +439,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
   }
 
   // Method to request cleaning
-  void _requestCleaning(DummyRooms room) {
+  void _requestCleaning(Room room) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -359,7 +462,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   DropdownMenuItem(value: 'Medium', child: Text('Medium')),
                   DropdownMenuItem(value: 'High', child: Text('High')),
                 ],
-                onChanged: (value) {},
+                onChanged: (value) {
+                  // Handle priority selection if needed
+                },
               ),
             ],
           ),
@@ -372,17 +477,18 @@ class _RoomsScreenState extends State<RoomsScreen> {
               onPressed: () {
                 Navigator.pop(context);
 
-                if (room.roomStatus == 'Available') {
+                if (room.roomStatus == 'Available' || room.roomStatus == 'NotReady') {
                   setState(() {
-                    final index = roomsList.indexWhere((r) => r.roomNumber == room.roomNumber);
+                    final index = _allRooms.indexWhere((r) => r.roomNumber == room.roomNumber);
                     if (index != -1) {
-                      roomsList[index] = DummyRooms(room.roomNumber, 'Cleaning');
+                      _allRooms[index] = room.copyWith(roomStatus: 'Cleaning');
                     }
                   });
                 }
 
                 _showSnackBar("Cleaning requested for Room ${room.roomNumber}!");
                 _sendNotification("Cleaning request for Room ${room.roomNumber}");
+                // TODO: Implement API call to update room status on backend
               },
               child: const Text("Submit Request"),
             ),
@@ -393,7 +499,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
   }
 
   // Method to request maintenance
-  void _requestMaintenance(DummyRooms room) {
+  void _requestMaintenance(Room room) {
     final TextEditingController issueController = TextEditingController();
 
     showDialog(
@@ -428,7 +534,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     DropdownMenuItem(value: 'High', child: Text('High')),
                     DropdownMenuItem(value: 'Emergency', child: Text('Emergency')),
                   ],
-                  onChanged: (value) {},
+                  onChanged: (value) {
+                    // Handle priority selection if needed
+                  },
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
@@ -443,7 +551,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     DropdownMenuItem(value: 'Furniture', child: Text('Furniture')),
                     DropdownMenuItem(value: 'Other', child: Text('Other')),
                   ],
-                  onChanged: (value) {},
+                  onChanged: (value) {
+                    // Handle type selection if needed
+                  },
                 ),
               ],
             ),
@@ -458,9 +568,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 Navigator.pop(context);
 
                 setState(() {
-                  final index = roomsList.indexWhere((r) => r.roomNumber == room.roomNumber);
+                  final index = _allRooms.indexWhere((r) => r.roomNumber == room.roomNumber);
                   if (index != -1) {
-                    roomsList[index] = DummyRooms(room.roomNumber, 'Maintenance');
+                    _allRooms[index] = room.copyWith(roomStatus: 'Maintenance');
                   }
                 });
 
@@ -469,6 +579,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     "Maintenance request for Room ${room.roomNumber}\n"
                         "Issue: ${issueController.text}"
                 );
+                // TODO: Implement API call to update room status on backend
               },
               child: const Text("Submit Request"),
             ),
@@ -498,15 +609,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   Color _getRoomColor(String status) {
     switch (status) {
-      case 'Available':
+      case 'CLEAN':
         return Colors.green;
-      case 'NotReady':
-        return Colors.orange;
-      case 'Occupied':
+      case 'DIRTY':
         return Colors.red;
-      case 'Maintenance':
+      case 'INPROGRESS':
+        return Colors.orange;
+      case 'INPROGRESS':
         return Colors.purple;
-      case 'Cleaning':
+      case 'OCCUPIED':
         return Colors.blue;
       default:
         return Colors.grey;
