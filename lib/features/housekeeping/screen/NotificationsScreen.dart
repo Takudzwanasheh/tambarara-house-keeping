@@ -549,7 +549,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     const SizedBox(height: 8),
                     Text(request.notes!),
                   ],
-                  Image.network(request.)
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
