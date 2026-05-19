@@ -104,8 +104,6 @@ class _AdminTableState extends State<AdminTable> {
                 );
 
                 try {
-                  // TODO: Call API to add stock
-                  // await DashboardController().addStock(item.id, quantity);
 
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -146,7 +144,6 @@ class _AdminTableState extends State<AdminTable> {
     return DataRow(
       cells: [
         DataCell(Text(item.productName)),
-        DataCell(Text(item.category)),
         DataCell(Text('${item.currentStock?.toString() ?? '0'} ${item.unit ?? ''}')),
         DataCell(
           Container(
@@ -209,54 +206,53 @@ class _AdminTableState extends State<AdminTable> {
       );
     }
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: _inventoryItems.isEmpty
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32.0),
-                  child: Column(
-                    children: [
-                      Icon(Icons.inventory, size: 48, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text('No inventory items found'),
+    return SingleChildScrollView(
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: _inventoryItems.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Column(
+                      children: [
+                        Icon(Icons.inventory, size: 48, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text('No inventory items found'),
+                      ],
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columnSpacing: 24,
+                    headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+                    columns: const [
+                      DataColumn(
+                        label: Text('Item Name',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+
+                      DataColumn(
+                        label: Text('Stock',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      DataColumn(
+                        label: Text('Status',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      DataColumn(
+                        label: Text('Actions',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
                     ],
+                    rows: _inventoryItems.map((item) => _buildDataRow(item)).toList(),
                   ),
                 ),
-              )
-            : SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columnSpacing: 24,
-                  headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-                  columns: const [
-                    DataColumn(
-                      label: Text('Item Name',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    DataColumn(
-                      label: Text('Category',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    DataColumn(
-                      label: Text('Stock',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    DataColumn(
-                      label: Text('Status',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    DataColumn(
-                      label: Text('Actions',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                  rows: _inventoryItems.map((item) => _buildDataRow(item)).toList(),
-                ),
-              ),
+        ),
       ),
     );
   }

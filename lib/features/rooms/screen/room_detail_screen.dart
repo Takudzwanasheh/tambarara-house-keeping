@@ -1,8 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:tambarara_house_keeping/data/models/room.dart';
 import 'package:tambarara_house_keeping/data/repository/room_repository.dart';
+import 'package:tambarara_house_keeping/features/housekeeping/controllers/dashboardController.dart';
+import 'package:tambarara_house_keeping/features/housekeeping/model/inventorymodel.dart';
+import 'package:tambarara_house_keeping/features/rooms/controller/roomController.dart';
+import 'package:http/http.dart' as http;
 
-import '../controller/roomController.dart';
+import '../../../utils/contants.dart';
+import '../model/ProductUsageModel.dart';
 
 class RoomDetailScreen extends StatefulWidget {
   final Room room;
@@ -16,14 +23,45 @@ class RoomDetailScreen extends StatefulWidget {
 class _RoomDetailScreenState extends State<RoomDetailScreen> {
   late Room _room;
   final RoomRepository _roomRepository = RoomRepository();
+  final DashboardController _dashboardController = DashboardController();
   bool _isUpdating = false;
   bool _isLoading = false;
   late String _filterStatus;
   List<Room> _allRooms = [];
 
+  // Cart items for POS system
+  List<CartItem> _cartItems = [];
+  List<Inventorymodel> _availableProducts = [];
+  bool _isLoadingProducts = false;
+
   // Sample data - in real app, this would come from API
   Map<String, dynamic> _roomDetails = {};
   List<Map<String, dynamic>> _activities = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _room = widget.room;
+    _filterStatus = 'All';
+    _fetchRoomDetails();
+    _loadProducts();
+    _fetchProductUsageHistory();
+  }
+
+  Future<void> _loadProducts() async {
+    setState(() {
+      _isLoadingProducts = true;
+    });
+    try {
+      _availableProducts = await _dashboardController.fetchInventoryData();
+    } catch (e) {
+      print("Error loading products: $e");
+    } finally {
+      setState(() {
+        _isLoadingProducts = false;
+      });
+    }
+  }
 
   List<Room> get filteredRooms {
     if (_filterStatus == 'All') {
@@ -47,42 +85,25 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     return _allRooms.where((room) => room.roomStatus == "OCCUPIED").toList();
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _room = widget.room;
-    _filterStatus = 'All';
-    _fetchRoomDetails();
-  }
-
   Future<void> _fetchRoomDetails() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Fetch latest room data
-      final updatedRoom = await _roomRepository.getRoomById(_room.roomNumber);
+      final updatedRoom = await _roomRepository.getRoomById(_room.roomNumber.toString());
       setState(() {
         _room = updatedRoom;
       });
 
-      // Fetch all rooms for the lists
       final allRooms = await _roomRepository.fetchRooms();
       setState(() {
         _allRooms = allRooms;
       });
 
       _setSampleData();
+      await _fetchRoomUsageHistory();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading room details: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
       _setSampleData();
     } finally {
       if (mounted) {
@@ -93,27 +114,34 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     }
   }
 
+  Future<void> _fetchRoomUsageHistory() async {
+    try {
+      // Fetch usage history for this room
+      // This would call your API endpoint: /api/cleaning/room/{roomId}/usage
+      // For now, we'll keep sample data
+    } catch (e) {
+      print("Error fetching usage history: $e");
+    }
+  }
+
   void _setSampleData() {
     _roomDetails = {
       'roomType': _room.roomType,
       'capacity': _room.roomCapacity,
       'rate': '\$${_room.roomPrice.toString()}/night',
     };
-
-    _activities = [
-      {'title': 'Cleaning Completed', 'time': 'Today, 10:30 AM', 'user': 'by Sarah J.'},
-      {'title': 'Maintenance Check', 'time': 'Yesterday, 04:15 PM', 'user': 'by Mike R.'},
-      {'title': 'Linens Changed', 'time': '2 days ago', 'user': 'by Sarah J.'},
-    ];
   }
 
-  Future<void> _updateRoomStatus(String newStatus) async {
+  Future<void> _updateRoomStatus(  String newStatus) async {
+     print('=== UPDATING ROOM STATUS ===');
+    print('Room Number: ${_room.roomNumber}');
+    print('New Status: $newStatus');
     setState(() {
       _isUpdating = true;
     });
 
     try {
-      final updatedRoom = await _roomRepository.updateRoomStatus(_room.roomNumber, newStatus);
+      final updatedRoom = await _roomRepository.updateRoomStatus(_room.id.toString(), newStatus);
 
       setState(() {
         _room = updatedRoom;
@@ -127,7 +155,6 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
           ),
         );
 
-        // Refresh the room details
         await _fetchRoomDetails();
       }
     } catch (e) {
@@ -148,11 +175,454 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     }
   }
 
+  // ==================== POS SYSTEM METHODS ====================
+
+  void _showProductUsageDialog() {
+    _cartItems.clear();
+    _showPOSDialog();
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 7) {
+      return '${date.day}/${date.month}/${date.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  void _showPOSDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              insetPadding: const EdgeInsets.all(16),
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.9,
+                height: MediaQuery.of(context).size.height * 0.85,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    // Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Room ${_room.roomNumber}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    const SizedBox(height: 16),
+
+                    // Two-column layout: Products on left, Cart on right
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Left: Product List
+                          Expanded(
+                            flex: 1,
+                            child: _buildProductList(context, setDialogState),
+                          ),
+                          const SizedBox(width: 16),
+
+                          // Right: Shopping Cart
+                          Expanded(
+                            flex: 2,
+                            child: _buildShoppingCart(context, setDialogState),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const Divider(),
+                    const SizedBox(height: 16),
+
+                    // Action Buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: _cartItems.isEmpty ? null : () => _submitUsage(context),
+                          icon: const Icon(Icons.check),
+                          label: const Text('Record Usage'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProductList(BuildContext context, StateSetter setDialogState) {
+    if (_isLoadingProducts) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // Group products by category
+    final Map<String, List<Inventorymodel>> groupedProducts = {};
+    for (var product in _availableProducts) {
+      if (!groupedProducts.containsKey(product.category)) {
+        groupedProducts[product.category] = [];
+      }
+      groupedProducts[product.category]!.add(product);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Select Products',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: _isLoadingProducts
+              ? const Center(child: CircularProgressIndicator())
+              : groupedProducts.isEmpty
+                  ? const Center(child: Text('No products available'))
+                  : ListView(
+                      children: groupedProducts.entries.map((entry) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                entry.key,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: entry.value.map((product) {
+                                return _buildProductCard(product, setDialogState);
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductCard(Inventorymodel product, StateSetter setDialogState) {
+    bool isLowStock = product.currentStock! <= product.reorderLevel!;
+    bool isOutOfStock = product.currentStock! <= 0;
+
+    return Container(
+      width: 100,
+      child: Card(
+        elevation: 2,
+        child: InkWell(
+          onTap: isOutOfStock
+              ? null
+              : () {
+                  _addToCart(product);
+                  setDialogState(() {});
+                },
+          borderRadius: BorderRadius.circular(8),
+          child: Center(
+            child: Container(
+              width: 140,
+              height: 80,
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                children: [
+
+                  const SizedBox(height: 8),
+                  Text(
+                    product.productName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Stock: ${product.currentStock?.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isLowStock ? Colors.orange : Colors.grey,
+                      fontWeight: isLowStock ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  if (isOutOfStock)
+                    const Chip(
+                      label: Text('Out', style: TextStyle(fontSize: 10)),
+                      backgroundColor: Colors.red,
+                      labelStyle: TextStyle(color: Colors.white),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShoppingCart(BuildContext context, StateSetter setDialogState) {
+    double totalCost = _cartItems.fold(0, (sum, item) => sum + item.totalCost);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Current Selection',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: _cartItems.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.shopping_cart_outlined, size: 48, color: Colors.grey),
+                      SizedBox(height: 10),
+                      Text('No items selected'),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: _cartItems.length,
+                  itemBuilder: (context, index) {
+                    final item = _cartItems[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  item.productName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle, color: Colors.red),
+                                  onPressed: () {
+                                    _removeFromCart(index);
+                                    setDialogState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                const Text('Qty:', style: TextStyle(fontSize: 12),),
+                                IconButton(
+                                  icon: const Icon(Icons.remove, size: 20),
+                                  onPressed: () {
+                                    if (item.quantity > 1) {
+                                      _updateCartQuantity(index, item.quantity - 1);
+                                      setDialogState(() {});
+                                    }
+                                  },
+                                ),
+                                Text(
+                                  item.quantity.toString(),
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add, size: 20),
+                                  onPressed: () {
+                                    _updateCartQuantity(index, item.quantity + 1);
+                                    setDialogState(() {});
+                                  },
+                                ),
+                                
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        const Divider(),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Total:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '${_cartItems.length}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _addToCart(Inventorymodel product) {
+    final existingIndex = _cartItems.indexWhere((item) => item.productId == product.id);
+    
+    if (existingIndex != -1) {
+      _cartItems[existingIndex].quantity++;
+      _cartItems[existingIndex].totalCost = 
+          _cartItems[existingIndex].quantity * (product.unitPrice ?? 0);
+    } else {
+      _cartItems.add(CartItem(
+        productId: product.id!,
+        productName: product.productName,
+        quantity: 1,
+        unitPrice: product.unitPrice ?? 0,
+        unit: product.unit ?? 'unit',
+      ));
+    }
+    setState(() {});
+  }
+
+  void _removeFromCart(int index) {
+    _cartItems.removeAt(index);
+    setState(() {});
+  }
+
+  void _updateCartQuantity(int index, int newQuantity) {
+    if (newQuantity <= 0) {
+      _cartItems.removeAt(index);
+    } else {
+      _cartItems[index].quantity = newQuantity;
+      _cartItems[index].totalCost = _cartItems[index].quantity * _cartItems[index].unitPrice;
+    }
+    setState(() {});
+  }
+
+  Future<void> _submitUsage(BuildContext context) async {
+    if (_cartItems.isEmpty) return;
+
+    setState(() {
+      _isUpdating = true;
+    });
+
+    try {
+      // Record each product usage
+      for (var item in _cartItems) {
+        await _dashboardController.recordProductUsage(
+          roomNumber: _room.roomNumber,
+          productId: item.productId,
+          quantityUsed: item.quantity.toDouble(),
+          cleanedBy: 'Housekeeper',
+          notes: 'Cleaning supplies for Room ${_room.roomNumber}',
+        );
+      }
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Supplies recorded successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Clear cart and close dialog
+        _cartItems.clear();
+        Navigator.pop(context);
+
+        // Refresh data
+        await _loadProducts();
+        await _fetchRoomDetails();
+        await _fetchProductUsageHistory(); // Add this line to refresh product list
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to record supplies: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
+    }
+  }
+
+  IconData _getProductIcon(String? category) {
+    switch (category?.toLowerCase()) {
+      case 'detergent':
+        return Icons.cleaning_services;
+      case 'linen':
+        return Icons.bed;
+      case 'supplies':
+        return Icons.inventory;
+      default:
+        return Icons.production_quantity_limits;
+    }
+  }
+
   void _showEditRoomDialog() {
-    final TextEditingController roomNumberController = TextEditingController(text: _room.roomNumber);
+    final TextEditingController roomNumberController = TextEditingController(text: _room.roomNumber.toString());
     final TextEditingController roomTypeController = TextEditingController(text: _room.roomType);
-    final TextEditingController roomPriceController=TextEditingController(text:_room.roomNumber);
-    final TextEditingController roomCapacityController= TextEditingController(text:_room.roomCapacity);
+    final TextEditingController roomPriceController = TextEditingController(text: _room.roomNumber.toString());
+    final TextEditingController roomCapacityController = TextEditingController(text: _room.roomCapacity);
     final TextEditingController priceController = TextEditingController(text: _room.roomPrice.toString());
     String selectedStatus = _room.roomStatus;
     bool isLocalUpdating = false;
@@ -212,17 +682,16 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'AVAILABLE', child: Text('Available')),
-                        DropdownMenuItem(value: 'OCCUPIED', child: Text('Occupied')),
-                        DropdownMenuItem(value: 'CLEAN', child: Text('Clean')),
-                        DropdownMenuItem(value: 'DIRTY', child: Text('Dirty')),
-                        DropdownMenuItem(value: 'MAINTENANCE', child: Text('Maintenance')),
+                        DropdownMenuItem(value: 'AVAILABLE', child: Text('AVAILABLE')),
+                        DropdownMenuItem(value: 'OCCUPIED', child: Text('OCCUPIED')),
+                        DropdownMenuItem(value: 'CLEAN', child: Text('CLEAN')),
+                        DropdownMenuItem(value: 'DIRTY', child: Text('DIRTY')),
+                        DropdownMenuItem(value: 'MAINTENANCE', child: Text('MAINTENANCE')),
                       ],
                       onChanged: (value) {
                         setDialogState(() {
                           selectedStatus = value!;
                         });
-                        print("Selected status updated to: $selectedStatus");
                       },
                     ),
                     if (isLocalUpdating)
@@ -242,59 +711,56 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
                   onPressed: isLocalUpdating
                       ? null
                       : () async {
-                    FocusScope.of(context).unfocus();
-                    setDialogState(() {
-                      isLocalUpdating = true;
-                    });
+                          FocusScope.of(context).unfocus();
+                          setDialogState(() {
+                            isLocalUpdating = true;
+                          });
 
-                    try {
-                      // Update room with all fields
-                      final Map<String, dynamic> updatedData = {
-                        'roomType': roomTypeController.text,
-                        "roomNumber":roomNumberController.text,
-                        "roomCapacity":roomCapacityController.text,
-                        'roomPrice': double.parse(priceController.text),
-                        'roomStatus': selectedStatus,
-                      };
+                          try {
+                            final Map<String, dynamic> updatedData = {
+                              'roomType': roomTypeController.text,
+                              "roomNumber": roomNumberController.text,
+                              "roomCapacity": roomCapacityController.text,
+                              'roomPrice': double.parse(priceController.text),
+                              'roomStatus': selectedStatus,
+                            };
 
-                      final updatedRoom = await _roomRepository.updateRoom(
-                        _room.id.toString(),
-                        updatedData,
-                      );
+                            final updatedRoom = await _roomRepository.updateRoom(
+                              _room.id.toString(),
+                              updatedData,
+                            );
 
-                      setState(() {
-                        _room = updatedRoom;
-                        final index = _allRooms.indexWhere(
+                            setState(() {
+                              _room = updatedRoom;
+                              final index = _allRooms.indexWhere(
                                 (r) => r.id == _room.id
-                        );
-                        if (index != -1) {
-                          _allRooms[index] = updatedRoom;
-                        }
-                      });
+                              );
+                              if (index != -1) {
+                                _allRooms[index] = updatedRoom;
+                              }
+                            });
 
-                      // Close dialog
-                      if (mounted) {
-                        Navigator.pop(dialogContext);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Room updated successfully'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      // Close dialog on error
-                      if (mounted) {
-                        Navigator.pop(dialogContext);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to update room: ${e.toString()}'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    }
-                  },
+                            if (mounted) {
+                              Navigator.pop(dialogContext);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Room updated successfully'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              Navigator.pop(dialogContext);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to update room: ${e.toString()}'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
                   child: const Text("Save"),
                 ),
               ],
@@ -305,45 +771,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     );
   }
 
-  Future<void> _updateRoom(Map<String, dynamic> updatedData) async {
-    setState(() {
-      _isUpdating = true;
-    });
-
-    try {
-      final updatedRoom = await _roomRepository.updateRoom(_room.roomNumber, updatedData);
-
-      setState(() {
-        _room = updatedRoom;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Room updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update room: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUpdating = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _showDeleteConfirmation() async {
+  Future<void> _deleteRoom() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -363,18 +791,14 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
       ),
     );
 
-    if (confirm == true) {
-      await _deleteRoom();
-    }
-  }
+    if (confirm != true) return;
 
-  Future<void> _deleteRoom() async {
     setState(() {
       _isUpdating = true;
     });
 
     try {
-      await _roomRepository.deleteRoom(_room.roomNumber);
+      await _roomRepository.deleteRoom(_room.roomNumber.toString());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -383,7 +807,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context, true); // Return to previous screen
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -412,34 +836,32 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            onPressed: _showProductUsageDialog,
+            icon: const Icon(Icons.add),
+            tooltip: 'Record Supplies Used',
+          ),
+          IconButton(
             onPressed: _showEditRoomDialog,
             icon: const Icon(Icons.edit),
             tooltip: 'Edit Room',
-          ),
-          IconButton(
-            onPressed: _showDeleteConfirmation,
-            icon: const Icon(Icons.delete),
-            tooltip: 'Delete Room',
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStatusHeader(),
-            const SizedBox(height: 24),
-            _buildInfoSection(),
-            const SizedBox(height: 24),
-            _buildRecentActivity(),
-            const SizedBox(height: 32),
-            _buildActionButtons(),
-          ],
-        ),
-      ),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStatusHeader(),
+                  const SizedBox(height: 24),
+                  _buildRecentActivity(),
+                  const SizedBox(height: 32),
+                  _buildActionButtons(),
+                ],
+              ),
+            ),
     );
   }
 
@@ -484,7 +906,100 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     );
   }
 
-  Widget _buildInfoSection() {
+  // Add this list to store product usage history
+  List<ProductUsage> _productUsageHistory = [];
+
+
+  Future<void> _fetchProductUsageHistory() async {
+    try {
+      // Fetch usage history for this room from your API
+      final response = await http.get(
+        Uri.parse('${Constants.baseUrl}/api/cleaning/room/${_room.roomNumber}/usage'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      print('Product Usage Response Status: ${response.statusCode}');
+      print('Product Usage Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        setState(() {
+          _productUsageHistory = data.map((json) => ProductUsage.fromJson(json)).toList();
+        });
+      } else if (response.statusCode == 404) {
+        // No usage history found
+        setState(() {
+          _productUsageHistory = [];
+        });
+      } else {
+        throw Exception('Failed to load product usage history');
+      }
+    } catch (e) {
+      print("Error fetching product usage: $e");
+      setState(() {
+        _productUsageHistory = [];
+      });
+    }
+  }
+
+  void _loadSampleProductUsage() {
+    _productUsageHistory = [
+      ProductUsage(
+        productName: "Bleach",
+        quantityUsed: 2,
+        unit: "Liters",
+        usedAt: DateTime.now().subtract(const Duration(days: 1)),
+        totalCost: 5.00,
+      ),
+      ProductUsage(
+        productName: "Towels",
+        quantityUsed: 4,
+        unit: "Pieces",
+        usedAt: DateTime.now().subtract(const Duration(days: 1)),
+        totalCost: 20.00,
+      ),
+      ProductUsage(
+        productName: "Shampoo",
+        quantityUsed: 2,
+        unit: "Bottles",
+        usedAt: DateTime.now().subtract(const Duration(days: 2)),
+        totalCost: 4.00,
+      ),
+    ];
+  }
+
+// New method to build the products used section
+  Widget _buildProductsUsedSection() {
+    if (_productUsageHistory.isEmpty) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              const Icon(Icons.inventory, size: 48, color: Colors.grey),
+              const SizedBox(height: 8),
+              const Text(
+                "No products used yet",
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: _showProductUsageDialog,
+                icon: const Icon(Icons.add),
+                label: const Text("Record Product Usage"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -493,21 +1008,100 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Room Information",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Products Used",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add, color: Colors.blue),
+                  onPressed: _showProductUsageDialog,
+                  tooltip: "Record Usage",
+                ),
+              ],
             ),
             const Divider(),
-            _buildInfoRow(Icons.king_bed, "Room Type", _room.roomType),
-            _buildInfoRow(Icons.timelapse, "Ocupied At", "12:01 PM"),
-            _buildInfoRow(Icons.watch, "Evacuated At", "00:00 AM"),
-            _buildInfoRow(Icons.people, "Capacity", _roomDetails['capacity']?.toString() ?? 'N/A'),
-            _buildInfoRow(Icons.attach_money, "Rate", "\$${_room.roomPrice.toString()}/night"),
-            _buildInfoRow(Icons.code, "Room Number", _room.roomNumber),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _productUsageHistory.length,
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final usage = _productUsageHistory[index];
+                return ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.inventory, color: Colors.blue),
+                  ),
+                  title: Text(
+                    usage.productName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quantity: ${usage.quantityUsed} ${usage.unit}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      Text(
+                        'Used: ${_formatDate(usage.usedAt)}',
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '\$${usage.totalCost.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Total Cost:",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  Text(
+                    '\$${_getTotalCost().toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  double _getTotalCost() {
+    return _productUsageHistory.fold(0.0, (sum, usage) => sum + usage.totalCost);
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
@@ -526,6 +1120,32 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
   }
 
   Widget _buildRecentActivity() {
+    if (_productUsageHistory.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Recent Housekeeping Activity",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Text(
+                "No housekeeping activities yet",
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -534,16 +1154,20 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        ..._activities.map((activity) => _buildActivityItem(
-          activity['title']!,
-          activity['time']!,
-          activity['user']!,
-        )),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _productUsageHistory.length,
+          itemBuilder: (context, index) {
+            final usage = _productUsageHistory[index];
+            return _buildActivityItem(usage);
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildActivityItem(String title, String time, String user) {
+  Widget _buildActivityItem(ProductUsage usage) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -553,14 +1177,56 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.history, size: 20, color: Colors.blue),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.cleaning_services,
+              size: 20,
+              color: Colors.blue,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text("$time • $user", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  'ISSUED:  ${usage.productName}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Quantity: ${usage.quantityUsed.toStringAsFixed(0)} ${usage.unit}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatDate(usage.usedAt),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(width: 12),
+                    if (usage.cleanedBy != null) ...[
+                      const SizedBox(width: 12),
+                      Icon(Icons.person, size: 12, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        usage.cleanedBy!,
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -575,7 +1241,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         Expanded(
           child: ElevatedButton.icon(
             onPressed: _isUpdating ? null : () => _updateRoomStatus('CLEAN'),
-            icon: const Icon(Icons.cleaning_services),
+            // icon: const Icon(Icons.cleaning_services),
             label: const Text("Mark Clean"),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
@@ -588,7 +1254,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         Expanded(
           child: ElevatedButton.icon(
             onPressed: _isUpdating ? null : () => _updateRoomStatus('DIRTY'),
-            icon: const Icon(Icons.warning),
+            // icon: const Icon(Icons.warning),
             label: const Text("Mark Dirty"),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
@@ -601,7 +1267,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         Expanded(
           child: ElevatedButton.icon(
             onPressed: _isUpdating ? null : () => _updateRoomStatus('MAINTENANCE'),
-            icon: const Icon(Icons.build),
+            // icon: const Icon(Icons.build),
             label: const Text("Maintenance"),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.purple,
@@ -645,4 +1311,22 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         return Icons.help;
     }
   }
+}
+
+// Cart Item Model
+class CartItem {
+  int productId;
+  String productName;
+  int quantity;
+  double unitPrice;
+  String unit;
+  double totalCost;
+
+  CartItem({
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.unit,
+  }) : totalCost = quantity * unitPrice;
 }

@@ -1,7 +1,7 @@
 // lib/data/models/room.dart
 class Room {
   final int id;
-  final String roomNumber;
+  final int roomNumber;
   final String roomStatus;
   final String roomCapacity;
   final String roomPrice;
@@ -19,7 +19,7 @@ class Room {
   factory Room.fromJson(Map<String, dynamic> json) {
     return Room(
       id: json["id"],
-      roomNumber: json['roomNumber'].toString(),
+      roomNumber: json['roomNumber'],
       roomStatus: json['roomStatus'] as String,
       roomCapacity: json['roomCapacity'] as String,
       roomPrice: json['roomPrice'] as String,

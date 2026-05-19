@@ -12,10 +12,43 @@ class RoomRepository {
   final baseUrl = Constants.baseUrl;
   static const int _timeoutSeconds = 10;
 
+  // Future<Room> createRoom(Map<String, dynamic> roomData) async {
+  //   try {
+  //     final response = await http.post(
+  //       Uri.parse('$baseUrl/api/rooms/add'),
+  //       headers: {
+  //         'Accept': 'application/json',
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: jsonEncode(roomData),
+  //     ).timeout(const Duration(seconds: _timeoutSeconds));
+  //
+  //     print("Create Room Response Status: ${response.statusCode}");
+  //     print("Create Room Response Body: ${response.body}");
+  //
+  //     if (response.statusCode == 200 || response.statusCode == 201) {
+  //       final Map<String, dynamic> responseData = jsonDecode(response.body);
+  //
+  //       if (responseData.containsKey('data') && responseData['data'] is Map) {
+  //         return Room.fromJson(responseData['data']);
+  //       } else if (responseData.containsKey('room')) {
+  //         return Room.fromJson(responseData['room']);
+  //       } else {
+  //         return Room.fromJson(responseData);
+  //       }
+  //     } else {
+  //       throw Exception('Failed to create room: ${response.statusCode}');
+  //     }
+  //   } catch (e) {
+  //     throw Exception('Error creating room: ${e.toString()}');
+  //   }
+  // }
+  //
+  //
   Future<List<Room>> fetchRooms() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/room/all'),
+        Uri.parse('$baseUrl/api/room/all'),
         headers: {
           'Accept': 'application/json',
         },
@@ -23,7 +56,7 @@ class RoomRepository {
 
       if (response.statusCode == 200) {
         final List<dynamic> roomJsonList = jsonDecode(response.body);
-        print(" ROOMS AVAILABLE , $roomJsonList");
+        // print(" ROOMS AVAILABLE , $roomJsonList");
         return roomJsonList.map((json) => Room.fromJson(json)).toList();
       } else {
         String errorMessage = 'Failed to load rooms. Status code: ${response.statusCode}';
@@ -50,7 +83,7 @@ class RoomRepository {
   Future<Room> updateRoom(String roomId, Map<String, dynamic> roomData) async {
     try {
       final response = await http.put(
-        Uri.parse('$baseUrl/room/update/$roomId'),  // Fixed: use roomId, not roomNumber
+        Uri.parse('$baseUrl/api/room/update/$roomId'),  // Fixed: use roomId, not roomNumber
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -59,7 +92,7 @@ class RoomRepository {
       ).timeout(const Duration(seconds: _timeoutSeconds));
 
       print("Update Room Response Status: ${response.statusCode}");
-      print("Update Room Response Body: ${response.body}");
+      // print("Update Room Response Body: ${response.body}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
@@ -97,7 +130,7 @@ class RoomRepository {
   Future<Room> updateRoomStatus(String id, String status) async {
     try {
       final response = await http.put(
-        Uri.parse('$baseUrl/room/edit/$id'),
+        Uri.parse('$baseUrl/api/room/edit/$id'),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -130,7 +163,7 @@ class RoomRepository {
   Future<Room> createRoom(Map<String, dynamic> roomData) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/room/add'),
+        Uri.parse('$baseUrl/api/room/add'),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -171,7 +204,7 @@ class RoomRepository {
   Future<bool> deleteRoom(String roomNumber) async {
     try {
       final response = await http.delete(
-        Uri.parse('$baseUrl/room/$roomNumber'),
+        Uri.parse('$baseUrl/api/room/$roomNumber'),
         headers: {
           'Accept': 'application/json',
         },
@@ -202,7 +235,7 @@ class RoomRepository {
   Future<Room> getRoomById(String roomNumber) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/room/$roomNumber'),
+        Uri.parse('$baseUrl/api/room/$roomNumber'),
         headers: {
           'Accept': 'application/json',
         },
@@ -231,7 +264,7 @@ class RoomRepository {
   Future<List<Room>> getRoomsByStatus(String roomStatus) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/room/status/$roomStatus'),
+        Uri.parse('$baseUrl/api/room/status/$roomStatus'),
         headers: {
           'Accept': 'application/json',
         },
@@ -260,7 +293,7 @@ class RoomRepository {
     // roomStatusUpdates example: {'room_id_1': 'Cleaned', 'room_id_2': 'Dirty'}
     try {
       final response = await http.patch(
-        Uri.parse('$baseUrl/room/bulk-status'),
+        Uri.parse('$baseUrl/api/room/bulk-status'),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',

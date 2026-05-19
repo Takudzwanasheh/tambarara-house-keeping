@@ -22,7 +22,6 @@ class DashboardScreen extends StatefulWidget {
     this.username = '',
     this.userRole = 'staff',
   });
-
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
@@ -194,6 +193,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             title: const Text("Inventory Supplies"),
             backgroundColor: Colors.blue[800],
             foregroundColor: Colors.white,
+            actions: [
+              IconButton(onPressed: (){}, icon: Icon(Icons.add))
+            ],
           ),
           body: const Padding(
             padding: EdgeInsets.all(16.0),
@@ -214,6 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: const Text(
         "TAMBARARA",
         style: TextStyle(
+          fontSize: 20,
             fontWeight: FontWeight.w900,
             letterSpacing: 1.2,
             color: Colors.white),
@@ -235,8 +238,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: Colors.white,
               ),
               Positioned(
-                right: 12,
-                top: 12,
+                right: 8,
+                top: 8,
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -249,7 +252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     minHeight: 12,
                   ),
                   child: const Text(
-                    '3',
+                    "3",
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 8,
@@ -329,8 +332,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Navigator.pop(context);
               setState(() => _selectedIndex = 3);
             }, isSelected: _selectedIndex == 3),
+
+            _buildDrawerItem(Icons.meeting_room_rounded, "Place Order", () {
+              Navigator.pop(context);
+            }, isSelected: true),
           ] else ...[
             _buildDrawerItem(Icons.meeting_room_rounded, "Rooms Status", () {
+              Navigator.pop(context);
+            }, isSelected: true),
+
+            _buildDrawerItem(Icons.meeting_room_rounded, "Place Order", () {
               Navigator.pop(context);
             }, isSelected: true),
           ],
@@ -363,15 +374,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final int cleanedRooms =
-        _dashboardRooms.where((room) => room.roomStatus == 'Available').length;
+        _dashboardRooms.where((room) => room.roomStatus == 'CLEAN').length;
     final int dirtyRooms = _dashboardRooms
         .where((room) =>
-            room.roomStatus == 'NotReady' || room.roomStatus == 'Cleaning')
+            room.roomStatus == 'NotReady' || room.roomStatus == 'DIRTY')
         .length;
     final int occupiedRoomsCount =
-        _dashboardRooms.where((room) => room.roomStatus == 'Occupied').length;
+        _dashboardRooms.where((room) => room.roomStatus == 'OCCUPIED').length;
     final int maintenanceRooms = _dashboardRooms
-        .where((room) => room.roomStatus == 'Maintenance')
+        .where((room) => room.roomStatus == 'MAINTENANCE')
         .length;
 
     return RefreshIndicator(
@@ -404,7 +415,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 childAspectRatio: 1.5,
                 children: [
                   _buildStatCard(
-                    "Cleaned",
+                    "CLEAN",
                     cleanedRooms.toString(),
                     Icons.check_circle_rounded,
                     Colors.green,
@@ -413,7 +424,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     },
                   ),
                   _buildStatCard(
-                    "Dirty",
+                    "DIRTY",
                     dirtyRooms.toString(),
                     Icons.warning_rounded,
                     Colors.orange,
@@ -422,7 +433,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     },
                   ),
                   _buildStatCard(
-                    "Occupied",
+                    "OCCUPIED",
                     occupiedRoomsCount.toString(),
                     Icons.person_pin_rounded,
                     Colors.blue,
@@ -431,7 +442,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     },
                   ),
                   _buildStatCard(
-                    "Maintenance",
+                    "MAINTENANCE",
                     maintenanceRooms.toString(),
                     Icons.build_rounded,
                     Colors.red,
@@ -483,11 +494,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     style: TextStyle(
                                         fontWeight: FontWeight.bold)),
                               ),
-                              DataColumn(
-                                label: Text('Category',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold)),
-                              ),
+                              // DataColumn(
+                              //   label: Text('Category',
+                              //       style: TextStyle(
+                              //           fontWeight: FontWeight.bold)),
+                              // ),
                               DataColumn(
                                 label: Text('Stock',
                                     style: TextStyle(
@@ -527,7 +538,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return DataRow(
       cells: [
         DataCell(Text(item.productName)),
-        DataCell(Text(item.category)),
+        // DataCell(Text(item.category)),
         DataCell(Text('${item.currentStock?.toString() ?? '0'} ${item.unit ?? ''}')),
         DataCell(
           Container(
